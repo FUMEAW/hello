@@ -46,14 +46,15 @@ export const DEFAULT_CATEGORIES: Category[] = [
 export const DEFAULT_USERS: UserProfile[] = [
   {
     id: 'usr-admin-owner',
-    name: 'Hardware Lead',
-    email: 'admin@ftcmanual.org',
+    name: 'Bubblotics Admin',
+    email: 'bubblotics@gmail.com',
     role: 'admin',
-    teamNumber: 'Lead Staff',
+    teamNumber: 'Bubblotics Lead',
     status: 'active',
     lastActive: 'Just now',
     hardwareSpecialty: 'Lead Hardware Architect',
     joinedDate: '2025-09-01',
+    password: 'lovebubbles',
   },
   {
     id: 'usr-contributor-1',

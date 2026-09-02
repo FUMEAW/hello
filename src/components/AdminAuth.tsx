@@ -70,6 +70,10 @@ export const AdminAuth: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
       setErrorMsg('Email is required.');
       return;
     }
+    if (!loginPasscode.trim()) {
+      setErrorMsg('Password is required.');
+      return;
+    }
 
     const res = loginUser(loginEmail, loginPasscode);
     if (res.success) {
@@ -180,12 +184,12 @@ export const AdminAuth: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Access Key <span className="text-slate-500">(Optional)</span>
+                  Password <span className="text-slate-500">(Enter 'lovebubbles' for Admin)</span>
                 </label>
                 <div className="relative">
                   <input
                     type="password"
-                    placeholder="Key"
+                    placeholder="Create a password (or enter admin key)"
                     value={passcode}
                     onChange={(e) => setPasscode(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
@@ -214,7 +218,7 @@ export const AdminAuth: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
                 <input
                   type="email"
                   required
-                  placeholder="name@team.org"
+                  placeholder="bubblotics@gmail.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
@@ -222,12 +226,16 @@ export const AdminAuth: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) =
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Passcode
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Password
+                  </label>
+                  <span className="text-[10px] text-slate-400">Admin password required</span>
+                </div>
                 <input
                   type="password"
-                  placeholder="••••••••"
+                  required
+                  placeholder="Enter password"
                   value={loginPasscode}
                   onChange={(e) => setLoginPasscode(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"

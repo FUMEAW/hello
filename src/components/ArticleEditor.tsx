@@ -25,10 +25,13 @@ import {
   Tag,
   Clock,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Article, ArticleDifficulty, ArticleStatus, Category } from '../types';
 import confetti from 'canvas-confetti';
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { ImageUploadModal } from './ImageUploadModal';
 
 export const ArticleEditor: React.FC = () => {
   const {
@@ -80,7 +83,10 @@ Key manufacturing tolerance or assembly detail.
   const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Sync state if editingArticleId changes
   useEffect(() => {
@@ -125,6 +131,75 @@ Key manufacturing tolerance or assembly detail.
     }, 50);
   };
 
+  const handleInsertMarkdown = (textToInsert: string) => {
+    const textarea = document.getElementById('article-content-textarea') as HTMLTextAreaElement;
+    if (!textarea) {
+      setContent(prev => prev + textToInsert);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? content.length;
+    const end = textarea.selectionEnd ?? content.length;
+    const newContent = content.substring(0, start) + textToInsert + content.substring(end);
+    setContent(newContent);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+    }, 50);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            if (dataUrl) {
+              const now = new Date();
+              const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              handleInsertMarkdown(`\n\n![Pasted Mechanism Screenshot (${dateStr})](${dataUrl})\n\n`);
+              setSaveSuccessMsg('Screenshot image inserted!');
+              setTimeout(() => setSaveSuccessMsg(''), 3000);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+        return;
+      }
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          if (dataUrl) {
+            const cleanName = file.name
+              .replace(/\.[^/.]+$/, '')
+              .replace(/[-_]/g, ' ')
+              .replace(/\b\w/g, l => l.toUpperCase());
+            handleInsertMarkdown(`\n\n![${cleanName}](${dataUrl})\n\n`);
+            setSaveSuccessMsg(`Image "${cleanName}" inserted!`);
+            setTimeout(() => setSaveSuccessMsg(''), 3000);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
   const handleSave = (publishDirect: boolean = false) => {
     if (!title.trim()) {
       alert('Please provide an article title.');
@@ -167,27 +242,39 @@ Key manufacturing tolerance or assembly detail.
   };
 
   const handleDelete = () => {
-    if (!existingArticle) return;
-    if (confirm(`Are you sure you want to delete "${existingArticle.title}"? This cannot be undone.`)) {
-      deleteArticle(existingArticle.id);
+    if (!existingArticle || currentUser.role !== 'admin') return;
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (!existingArticle || currentUser.role !== 'admin') return;
+    const deletedId = existingArticle.id;
+    deleteArticle(deletedId);
+    setShowDeleteModal(false);
+    const remaining = articles.filter(a => a.id !== deletedId);
+    if (remaining.length > 0) {
+      setActiveArticleId(remaining[0].id);
       setCurrentView('reader');
+    } else {
+      setActiveArticleId('');
+      setCurrentView('home');
     }
   };
 
-  const restoreRevision = (revContent: string, revNote: string) => {
-    if (confirm(`Restore to revision "${revNote}"? Current unsaved changes will be overwritten.`)) {
-      setContent(revContent);
-      setIsHistoryModalOpen(false);
-    }
+  const restoreRevision = (revContent: string, _revNote?: string) => {
+    setContent(revContent);
+    setIsHistoryModalOpen(false);
+    setSaveSuccessMsg('Revision restored');
+    setTimeout(() => setSaveSuccessMsg(''), 2500);
   };
 
-  // Preview renderer
+  // Preview renderer using full MarkdownRenderer
   const renderPreview = () => {
     return (
-      <div className="p-6 bg-white min-h-full article-prose text-sm sm:text-base">
+      <div className="p-6 sm:p-8 bg-white min-h-full">
         <div className="mb-6 pb-4 border-b border-slate-200">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
               {difficulty} Track
             </span>
             <span className="text-xs text-slate-500 font-mono">
@@ -201,36 +288,14 @@ Key manufacturing tolerance or assembly detail.
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-['Outfit'] mb-2">
             {title || 'Untitled Article'}
           </h1>
-          <p className="text-sm sm:text-base text-slate-600 font-normal">
-            {subtitle || 'Subsystem design and modeling guide.'}
-          </p>
+          {subtitle && (
+            <p className="text-sm sm:text-base text-slate-600 font-normal">
+              {subtitle}
+            </p>
+          )}
         </div>
 
-        {content.split('\n\n').map((block, idx) => {
-          const trimmed = block.trim();
-          if (trimmed.startsWith(':::tip') || trimmed.startsWith(':::warning') || trimmed.startsWith(':::pro') || trimmed.startsWith(':::math') || trimmed.startsWith(':::note')) {
-            return (
-              <div key={idx} className="my-4 p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950">
-                <p className="font-bold text-xs mb-1">Custom Callout Block</p>
-                <div className="text-sm whitespace-pre-wrap">{trimmed}</div>
-              </div>
-            );
-          }
-          if (trimmed.startsWith('```')) {
-            return (
-              <pre key={idx} className="my-4 p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-                {trimmed}
-              </pre>
-            );
-          }
-          if (trimmed.startsWith('## ')) {
-            return <h2 key={idx} className="text-xl font-bold text-slate-900 mt-6 mb-3">{trimmed.replace('## ', '')}</h2>;
-          }
-          if (trimmed.startsWith('### ')) {
-            return <h3 key={idx} className="text-lg font-bold text-blue-900 mt-4 mb-2">{trimmed.replace('### ', '')}</h3>;
-          }
-          return <p key={idx} className="my-3 text-slate-700">{trimmed}</p>;
-        })}
+        <MarkdownRenderer content={content} />
       </div>
     );
   };
@@ -270,34 +335,37 @@ Key manufacturing tolerance or assembly detail.
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           
-          {/* View Mode Toggle */}
-          <div className="hidden sm:flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700 text-xs">
+          {/* View Mode Toggle - Responsive */}
+          <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700 text-xs">
             <button
               onClick={() => setViewMode('edit')}
-              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                viewMode === 'edit' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+              className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                viewMode === 'edit' ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
+              title="Markdown Edit Only"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit</span>
+              <span className="hidden md:inline">Edit</span>
             </button>
             <button
               onClick={() => setViewMode('split')}
-              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                viewMode === 'split' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+              className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                viewMode === 'split' ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
+              title="Split View (Editor + Live Rendered Preview)"
             >
               <Columns className="w-3.5 h-3.5" />
-              <span>Split</span>
+              <span className="hidden md:inline">Split</span>
             </button>
             <button
               onClick={() => setViewMode('preview')}
-              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
-                viewMode === 'preview' ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+              className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                viewMode === 'preview' ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
+              title="Full Rendered Preview"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Preview</span>
+              <span className="hidden md:inline">Preview</span>
             </button>
           </div>
 
@@ -331,6 +399,18 @@ Key manufacturing tolerance or assembly detail.
             <Save className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Save Draft</span>
           </button>
+
+          {/* Delete Article Button (Header) - Admin Only */}
+          {existingArticle && currentUser.role === 'admin' && (
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:text-white bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 rounded-lg transition-colors"
+              title="Delete this article (Admin only)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          )}
 
           {/* Publish / Submit CTA */}
           <button
@@ -374,6 +454,18 @@ Key manufacturing tolerance or assembly detail.
           title="Heading 3"
         >
           H3
+        </button>
+        <div className="h-4 w-px bg-slate-300 mx-1" />
+
+        {/* Image / Diagram Inserter & Uploader */}
+        <button
+          type="button"
+          onClick={() => setIsImageModalOpen(true)}
+          className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded font-medium border border-emerald-200 transition-colors"
+          title="Upload or Insert CAD Renders, Photos & Diagrams"
+        >
+          <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Insert Image</span>
         </button>
         <div className="h-4 w-px bg-slate-300 mx-1" />
 
@@ -451,16 +543,48 @@ Key manufacturing tolerance or assembly detail.
           
           {/* Markdown Textarea */}
           {(viewMode === 'edit' || viewMode === 'split') && (
-            <div className={`flex-1 flex flex-col bg-slate-900 text-slate-100 ${viewMode === 'split' ? 'border-r border-slate-800' : ''}`}>
+            <div 
+              onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+              onDragLeave={() => setIsDraggingFile(false)}
+              onDrop={handleFileDrop}
+              className={`relative flex-1 flex flex-col bg-slate-900 text-slate-100 ${viewMode === 'split' ? 'border-r border-slate-800' : ''}`}
+            >
               <div className="px-4 py-1.5 bg-slate-950 border-b border-slate-800 text-[11px] font-mono text-slate-400 flex items-center justify-between">
-                <span>MARKDOWN EDITOR</span>
-                <span>{content.length} characters • ~{Math.ceil(content.split(/\s+/).length / 200)} min read</span>
+                <div className="flex items-center gap-2">
+                  <span>MARKDOWN SOURCE</span>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-[10px] text-slate-500">Drag &amp; drop images or paste (Ctrl+V)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>{content.length} chars • ~{Math.ceil(content.split(/\s+/).length / 200)} min</span>
+                  {viewMode === 'edit' && (
+                    <button
+                      onClick={() => setViewMode('split')}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded text-[10px] font-sans"
+                    >
+                      Show Preview
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Drag file active overlay */}
+              {isDraggingFile && (
+                <div className="absolute inset-0 z-20 bg-blue-900/80 backdrop-blur-xs border-2 border-dashed border-blue-400 flex flex-col items-center justify-center p-6 text-center text-white pointer-events-none">
+                  <div className="w-14 h-14 rounded-full bg-blue-500/30 flex items-center justify-center mb-3">
+                    <ImageIcon className="w-8 h-8 text-blue-300" />
+                  </div>
+                  <p className="text-base font-bold">Drop Image to Insert</p>
+                  <p className="text-xs text-blue-200 mt-1">Image will be automatically converted and placed in the article</p>
+                </div>
+              )}
+
               <textarea
                 id="article-content-textarea"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Write your technical guide here..."
+                onPaste={handlePaste}
+                placeholder="Write your technical guide in Markdown here... (Drag images or paste screenshots anytime)"
                 className="flex-1 w-full p-4 bg-transparent text-slate-100 font-mono text-xs sm:text-sm leading-relaxed resize-none focus:outline-none selection:bg-blue-600"
                 spellCheck={false}
               />
@@ -471,8 +595,11 @@ Key manufacturing tolerance or assembly detail.
           {(viewMode === 'preview' || viewMode === 'split') && (
             <div className="flex-1 overflow-y-auto bg-white">
               <div className="px-4 py-1.5 bg-slate-100 border-b border-slate-200 text-[11px] font-mono text-slate-500 flex items-center justify-between sticky top-0 z-10">
-                <span>LIVE PREVIEW</span>
-                <span className="text-emerald-700 font-semibold">Real-time sync</span>
+                <span className="font-semibold text-slate-700">LIVE RENDERED PREVIEW</span>
+                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Markdown Rendering Active
+                </span>
               </div>
               {renderPreview()}
             </div>
@@ -627,8 +754,9 @@ Key manufacturing tolerance or assembly detail.
             {existingArticle && currentUser.role === 'admin' && (
               <div className="pt-4 border-t border-slate-200">
                 <button
+                  type="button"
                   onClick={handleDelete}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 font-semibold transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 font-semibold transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete Article</span>
@@ -675,6 +803,56 @@ Key manufacturing tolerance or assembly detail.
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Upload & Diagram Insertion Modal */}
+      <ImageUploadModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        onInsertImage={(markdown) => {
+          handleInsertMarkdown(markdown);
+          setSaveSuccessMsg('Image inserted into article!');
+          setTimeout(() => setSaveSuccessMsg(''), 3000);
+        }}
+      />
+
+      {/* Delete Article Confirmation Modal (no window.confirm, 100% works in iframe) */}
+      {showDeleteModal && existingArticle && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 font-['Outfit'] text-base">Delete Article</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+              Are you sure you want to permanently delete <span className="font-semibold text-slate-900">"{existingArticle.title}"</span> from the engineering manual?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm shadow-red-500/20 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Delete Article</span>
+              </button>
             </div>
           </div>
         </div>

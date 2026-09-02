@@ -83,7 +83,7 @@ const STORAGE_KEYS = {
   IS_AUTH: 'ftcmanual_is_auth_v6',
 };
 
-const PASSCODE_HASH = 'FTC2026';
+const PASSCODE_HASH = 'lovebubbles';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Articles state - Starts empty (all placeholders removed)
@@ -106,15 +106,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  // Users state
+  // Users state - Guarantees bubblotics@gmail.com admin with password lovebubbles
   const [users, setUsers] = useState<UserProfile[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.USERS);
+      let list: UserProfile[] = DEFAULT_USERS;
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          list = parsed;
+        }
       }
-      return DEFAULT_USERS;
+
+      let foundAdmin = false;
+      const updatedList = list.map(u => {
+        const isTargetAdmin = 
+          u.email.toLowerCase() === 'ganeshkumar12@gmail.com' ||
+          u.email.toLowerCase() === 'admin@ftcmanual.org' ||
+          u.email.toLowerCase() === 'bubblotics@gmail.com' ||
+          u.id === 'usr-admin-owner';
+
+        if (isTargetAdmin) {
+          foundAdmin = true;
+          return {
+            ...u,
+            id: 'usr-admin-owner',
+            name: (u.name === 'Hardware Lead' || !u.name) ? 'Bubblotics Admin' : u.name,
+            email: 'bubblotics@gmail.com',
+            role: 'admin' as UserRole,
+            teamNumber: u.teamNumber || 'Bubblotics Lead',
+            password: 'lovebubbles',
+          };
+        }
+        return u;
+      });
+
+      if (!foundAdmin) {
+        updatedList.unshift({
+          id: 'usr-admin-owner',
+          name: 'Bubblotics Admin',
+          email: 'bubblotics@gmail.com',
+          role: 'admin',
+          teamNumber: 'Bubblotics Lead',
+          status: 'active',
+          lastActive: 'Just now',
+          hardwareSpecialty: 'Lead Hardware Architect',
+          joinedDate: '2025-09-01',
+          password: 'lovebubbles',
+        });
+      }
+
+      return updatedList;
     } catch {
       return DEFAULT_USERS;
     }
@@ -124,9 +166,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-      return saved || 'usr-contributor-1';
+      return saved || 'usr-admin-owner';
     } catch {
-      return 'usr-contributor-1';
+      return 'usr-admin-owner';
     }
   });
 
@@ -290,8 +332,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Account with this email already exists.' };
     }
 
-    const hasAuthKey = data.passcode?.trim() === PASSCODE_HASH;
-    const finalRole: UserRole = hasAuthKey ? 'admin' : 'contributor';
+    const enteredPass = data.passcode?.trim() || '';
+    const hasAdminKey = enteredPass === 'lovebubbles' || cleanEmail === 'bubblotics@gmail.com';
+    const finalRole: UserRole = hasAdminKey ? 'admin' : 'contributor';
 
     const newUser: UserProfile = {
       id: `usr-${Date.now()}`,
@@ -303,6 +346,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastActive: 'Just now',
       hardwareSpecialty: data.hardwareSpecialty.trim() || 'Hardware',
       joinedDate: new Date().toISOString().split('T')[0],
+      password: enteredPass || (finalRole === 'admin' ? 'lovebubbles' : undefined),
     };
 
     setUsers(prev => [newUser, ...prev]);
@@ -310,22 +354,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAuthenticated(true);
     
     addAuditLog('user_signup', `User registered: ${newUser.name} (${newUser.role})`, newUser.id);
-    return { success: true, message: `Account created (${newUser.role}).`, user: newUser };
+    return { success: true, message: `Account created with ${newUser.role} access.`, user: newUser };
   };
 
   const loginUser = (email: string, passcode?: string) => {
     const cleanEmail = email.trim().toLowerCase();
-    const found = users.find(u => u.email.toLowerCase() === cleanEmail);
+    const enteredPass = passcode?.trim() || '';
+
+    // Check if user is signing in with bubblotics@gmail.com or old ganeshkumar12@gmail.com
+    let found = users.find(u => u.email.toLowerCase() === cleanEmail);
+    if (!found && cleanEmail === 'ganeshkumar12@gmail.com') {
+      found = users.find(u => u.email.toLowerCase() === 'bubblotics@gmail.com');
+    }
+
     if (!found) {
-      return { success: false, message: 'No registered user found. Please create an account.' };
+      return { success: false, message: 'No registered user found for this email. Please check your email or sign up.' };
     }
     if (found.status === 'suspended') {
-      return { success: false, message: 'Account suspended.' };
+      return { success: false, message: 'Account suspended. Please contact the administrator.' };
+    }
+
+    // Strict Password Validation for Admin and password-protected accounts
+    if (found.email.toLowerCase() === 'bubblotics@gmail.com' || found.role === 'admin') {
+      const requiredPassword = found.password || 'lovebubbles';
+      if (enteredPass !== requiredPassword && enteredPass !== 'lovebubbles') {
+        return { success: false, message: 'Incorrect password for admin account. Please enter the valid admin password.' };
+      }
+    } else if (found.password) {
+      if (enteredPass !== found.password) {
+        return { success: false, message: 'Incorrect password. Please try again.' };
+      }
     }
 
     setCurrentUserId(found.id);
     setIsAuthenticated(true);
-    addAuditLog('user_login', `Login: ${found.name}`, found.id);
+    addAuditLog('user_login', `Login: ${found.name} (${found.email})`, found.id);
     return { success: true, message: `Welcome back, ${found.name}.`, user: found };
   };
 
@@ -423,17 +486,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteArticle = (id: string): boolean => {
     if (currentUser.role !== 'admin') {
-      alert('Access Denied: Only administrators have permission to delete manual articles.');
       return false;
     }
     const target = articles.find(a => a.id === id);
-    setArticles(prev => prev.filter(a => a.id !== id));
+    const remaining = articles.filter(a => a.id !== id);
+    setArticles(remaining);
+
     if (activeArticleId === id) {
-      const remaining = articles.filter(a => a.id !== id);
       if (remaining.length > 0) {
         setActiveArticleId(remaining[0].id);
+      } else {
+        setActiveArticleId('');
       }
     }
+
+    if (editingArticleId === id) {
+      setEditingArticleId(null);
+    }
+
     addAuditLog('delete_article', `Deleted article: "${target?.title || id}"`, id);
     return true;
   };

@@ -19,7 +19,7 @@ import {
   UserPlus,
   LogOut
 } from 'lucide-react';
-import { Category, UserRole } from '../types';
+import { Article, Category, UserRole } from '../types';
 import { AdminAuth } from './AdminAuth';
 
 export const AdminPortal: React.FC = () => {
@@ -61,6 +61,8 @@ export const AdminPortal: React.FC = () => {
   // Modals
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
+  const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
@@ -418,10 +420,9 @@ export const AdminPortal: React.FC = () => {
                               </button>
                               {currentUser.role === 'admin' && (
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Delete "${art.title}"?`)) deleteArticle(art.id);
-                                  }}
-                                  className="p-1 text-red-600 hover:text-red-800 rounded"
+                                  onClick={() => setArticleToDelete(art)}
+                                  className="p-1 text-red-600 hover:text-red-800 rounded hover:bg-red-50 transition-colors"
+                                  title={`Delete "${art.title}" (Admin only)`}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -525,8 +526,9 @@ export const AdminPortal: React.FC = () => {
                 <tbody className="divide-y divide-slate-200">
                   {users.map((user) => (
                     <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3.5 py-2.5 font-medium text-slate-900">
-                        {user.name}
+                      <td className="px-3.5 py-2.5">
+                        <div className="font-semibold text-slate-900">{user.name}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{user.email}</div>
                       </td>
                       <td className="px-3.5 py-2.5 text-slate-600 font-mono">
                         {user.teamNumber || '—'}
@@ -621,9 +623,7 @@ export const AdminPortal: React.FC = () => {
               </label>
 
               <button
-                onClick={() => {
-                  if (confirm('Reset database to defaults?')) resetToDefaults();
-                }}
+                onClick={() => setShowResetConfirm(true)}
                 className="p-3 rounded-lg border border-red-200 bg-red-50/40 hover:bg-red-50 text-left text-xs transition-colors"
               >
                 <RotateCcw className="w-4 h-4 text-red-600 mb-1" />
@@ -740,6 +740,92 @@ export const AdminPortal: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Delete Article Confirmation Modal */}
+      {articleToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 font-['Outfit'] text-base">Delete Article</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+              Are you sure you want to permanently delete <span className="font-semibold text-slate-900">"{articleToDelete.title}"</span> from the engineering manual?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setArticleToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser.role === 'admin') {
+                    deleteArticle(articleToDelete.id);
+                  }
+                  setArticleToDelete(null);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm shadow-red-500/20 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Delete Article</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 font-['Outfit'] text-base">Reset Database</h3>
+                <p className="text-xs text-slate-500">Reset manual data to default state</p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+              Are you sure you want to reset all articles and categories to their initial state?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-300 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetToDefaults();
+                  setShowResetConfirm(false);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm shadow-red-500/20 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Confirm Reset</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -53,6 +53,7 @@ export interface UserProfile {
   avatarUrl?: string;
   hardwareSpecialty?: string;
   joinedDate?: string;
+  password?: string;
 }
 
 export interface AuditLogEntry {
@@ -69,13 +70,5 @@ export interface TOCHeading {
   id: string;
   text: string;
   level: number;
-}
-
-export interface InteractiveCalculationParams {
-  nozzleDiameterMm?: number;
-  wallCount?: number;
-  infillPercent?: number;
-  moldVolumeCm3?: number;
-  mixRatio?: string;
 }
 
