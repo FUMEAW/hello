@@ -1,0 +1,6 @@
+{
+  "name": "ftcmanual",
+  "description": "An intermediate-to-advanced documentation manual and engineering guide for FIRST Tech Challenge teams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
